@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#090d16"/>
+  <circle cx="256" cy="256" r="230" fill="url(#brandGrad)" fill-opacity="0.15"/>
+  <defs>
+    <linearGradient id="brandGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="50%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="metalGrad" x1="100" y1="150" x2="400" y2="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <!-- Stylized Motorbike Outline -->
+  <!-- Rear wheel -->
+  <circle cx="150" cy="330" r="70" stroke="#38bdf8" stroke-width="22"/>
+  <circle cx="150" cy="330" r="30" fill="#0284c7"/>
+  <!-- Front wheel -->
+  <circle cx="362" cy="330" r="70" stroke="#38bdf8" stroke-width="22"/>
+  <circle cx="362" cy="330" r="30" fill="#0284c7"/>
+  <!-- Frame body -->
+  <path d="M 150 330 L 220 250 L 320 250 L 362 330" stroke="#f8fafc" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Handlebars & fork -->
+  <path d="M 362 330 L 305 180 L 275 180" stroke="#f8fafc" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Fuel tank & seat line -->
+  <path d="M 170 240 Q 220 210 260 210 L 315 210 L 300 250 Z" fill="url(#brandGrad)"/>
+  <!-- Speed lines / Energy badge -->
+  <path d="M 110 180 L 170 180" stroke="#10b981" stroke-width="12" stroke-linecap="round"/>
+  <path d="M 80 210 L 140 210" stroke="#10b981" stroke-width="12" stroke-linecap="round"/>
+  <!-- Brand text badge -->
+  <text x="256" y="445" text-anchor="middle" fill="#38bdf8" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="42" letter-spacing="4">RYOKORENT</text>
+  <text x="256" y="480" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="22" letter-spacing="3">MALANG · BATU</text>
+</svg>

@@ -1,0 +1,269 @@
+/**
+ * Styling Katalog Motor, Indikator Stok Biner (D-05), & Formulir Pemesanan Publik Ryokourent
+ */
+
+.ryokou-katalog-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+	gap: 20px;
+	margin: 24px 0;
+}
+
+.ryokou-motor-card {
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	border-radius: 12px;
+	padding: 20px;
+	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.ryokou-card-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.ryokou-motor-title {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 700;
+	color: #0f172a;
+}
+
+/* Badge Kategori Model Motor (Matic, Retro, Trail, Sport) */
+.ryokou-cat-badge {
+	display: inline-block;
+	padding: 3px 8px;
+	border-radius: 6px;
+	font-size: 0.72rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	margin-bottom: 4px;
+}
+
+.ryokou-cat-badge.matic {
+	background-color: #e0f2fe;
+	color: #0369a1;
+	border: 1px solid #bae6fd;
+}
+
+.ryokou-cat-badge.retro {
+	background-color: #ede9fe;
+	color: #6d28d9;
+	border: 1px solid #ddd6fe;
+}
+
+.ryokou-cat-badge.trail {
+	background-color: #fef3c7;
+	color: #b45309;
+	border: 1px solid #fde68a;
+}
+
+.ryokou-cat-badge.sport {
+	background-color: #fce7f3;
+	color: #be185d;
+	border: 1px solid #fbcfe8;
+}
+
+.ryokou-spesifikasi-text {
+	font-size: 0.82rem;
+	color: #334155;
+	background: #f1f5f9;
+	padding: 7px 11px;
+	border-radius: 6px;
+	margin: 8px 0;
+	border-left: 3px solid #0f766e;
+	line-height: 1.4;
+}
+
+/* Indikator Stok Biner Tegas (D-05: Hanya Tersedia [Hijau] atau Habis [Merah]) */
+.ryokou-indicator-badge {
+	display: inline-block;
+	padding: 4px 10px;
+	border-radius: 6px;
+	font-size: 0.75rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.ryokou-indicator-badge.tersedia,
+.ryokou-indicator-badge.hijau {
+	background-color: #dcfce7;
+	color: #166534;
+	border: 1px solid #86efac;
+}
+
+.ryokou-indicator-badge.habis,
+.ryokou-indicator-badge.merah {
+	background-color: #fee2e2;
+	color: #991b1b;
+	border: 1px solid #fca5a5;
+}
+
+.ryokou-main-price-box {
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 12px;
+	margin-bottom: 12px;
+}
+
+.ryokou-price-label {
+	display: block;
+	font-size: 0.75rem;
+	color: #64748b;
+}
+
+.ryokou-price-amount {
+	font-size: 1.35rem;
+	font-weight: 800;
+	color: #065f46;
+}
+
+.ryokou-fasilitas-text,
+.ryokou-denda-text {
+	font-size: 0.82rem;
+	color: #475569;
+	margin: 4px 0;
+}
+
+.ryokou-select-motor-btn {
+	display: block;
+	text-align: center;
+	margin-top: 14px;
+	padding: 10px 14px;
+	background: #065f46;
+	color: #ffffff !important;
+	text-decoration: none;
+	font-weight: 700;
+	border-radius: 8px;
+	transition: background 0.15s ease;
+}
+
+.ryokou-select-motor-btn:hover {
+	background: #047857;
+}
+
+/* Form Pemesanan Publik */
+.ryokou-booking-wrapper {
+	background: #ffffff;
+	border: 1px solid #cbd5e1;
+	border-radius: 14px;
+	padding: 24px;
+	margin: 28px 0;
+}
+
+.ryokou-form-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 16px;
+	margin-bottom: 16px;
+}
+
+.ryokou-form-group label {
+	display: block;
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: #1e293b;
+	margin-bottom: 6px;
+}
+
+.ryokou-form-group input,
+.ryokou-form-group select {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid #cbd5e1;
+	border-radius: 8px;
+	font-size: 0.92rem;
+	color: #0f172a;
+	background: #ffffff;
+}
+
+.ryokou-shortrent-note {
+	background: #fffbeb;
+	border: 1px solid #fde68a;
+	color: #92400e;
+	padding: 12px 14px;
+	border-radius: 8px;
+	font-size: 0.85rem;
+	margin-bottom: 16px;
+}
+
+.ryokou-warning-box {
+	background: #fef3c7;
+	border: 1px solid #f59e0b;
+	color: #92400e;
+	padding: 12px 14px;
+	border-radius: 8px;
+	font-size: 0.85rem;
+	margin-bottom: 16px;
+}
+
+.ryokou-error-box {
+	background: #fef2f2;
+	border: 1px solid #f87171;
+	color: #991b1b;
+	padding: 12px 14px;
+	border-radius: 8px;
+	font-size: 0.88rem;
+	font-weight: 600;
+	margin-bottom: 16px;
+}
+
+.ryokou-stock-box {
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	margin-bottom: 16px;
+	font-size: 0.85rem;
+}
+
+.ryokou-pdp-disclaimer {
+	font-size: 0.8rem;
+	color: #475569;
+	background: #f1f5f9;
+	padding: 10px 12px;
+	border-radius: 8px;
+	margin-bottom: 16px;
+}
+
+.ryokou-summary-box {
+	background: #f8fafc;
+	border: 1px solid #cbd5e1;
+	border-radius: 10px;
+	padding: 14px 16px;
+	margin-bottom: 18px;
+	font-size: 0.9rem;
+}
+
+.ryokou-summary-total {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed #cbd5e1;
+	font-size: 1.05rem;
+	color: #065f46;
+}
+
+.ryokou-submit-button {
+	width: 100%;
+	padding: 14px 20px;
+	background: #065f46;
+	color: #ffffff;
+	border: none;
+	border-radius: 10px;
+	font-size: 1rem;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.ryokou-submit-button:hover {
+	background: #047857;
+}

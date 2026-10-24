@@ -1,0 +1,8 @@
+{
+  "name": "RyokoRent Admin APK",
+  "description": "Aplikasi Android Administrasi Rental Sepeda Motor (Ryoko Rent Malang & Batu) berbasis database offline LocalStorage, state machine 4 status, pelacakan armada unit fisik, dan integrasi WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
