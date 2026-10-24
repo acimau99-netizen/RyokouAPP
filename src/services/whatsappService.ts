@@ -1,4 +1,9 @@
-import { BookingRecord, UnitExchangeLog, OvertimePenaltyResult } from '../types/ryoko';
+import {
+  BookingRecord,
+  UnitExchangeLog,
+  OvertimePenaltyResult,
+  ServiceRecord,
+} from '../types/ryoko';
 import { formatRupiah } from './bookingEngine';
 
 /**
@@ -16,7 +21,15 @@ export function normalizeWhatsAppNumber(phone: string): string {
 }
 
 /**
- * Tautan WhatsApp untuk Konfirmasi Booking Baru (D-03, D-09, D-21)
+ * Tautan WhatsApp generik dari nomor dan teks
+ */
+export function generateWhatsAppLink(phone: string, text: string): string {
+  const target = normalizeWhatsAppNumber(phone);
+  return `https://api.whatsapp.com/send?phone=${encodeURIComponent(target)}&text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * 1. Tautan WhatsApp untuk Konfirmasi Booking Baru (D-03, D-09, Bagian 10)
  */
 export function generateBookingConfirmationWhatsAppUrl(
   booking: BookingRecord,
@@ -33,7 +46,6 @@ export function generateBookingConfirmationWhatsAppUrl(
     `*Nama Penyewa:* ${booking.nama}`,
     `*No. WhatsApp:* ${booking.nomorWa || '-'}`,
     `*Status Pelanggan:* ${customerTypeLabel}`,
-    `*ID Pendukung:* ${booking.jenisIdPendukung || 'SIM_C'} (Tanpa NIK - Kepatuhan UU PDP)`,
     `*Unit Motor:* ${booking.snapshotNamaMotor}`,
     `*Paket / Durasi:* ${booking.labelDurasi}`,
     `*Waktu Mulai:* ${booking.jamTanggalMulai.replace('T', ' ')} WIB`,
@@ -47,6 +59,10 @@ export function generateBookingConfirmationWhatsAppUrl(
 
   if (booking.snapshotKodeUnit) {
     lines.push(`*Unit Fisik Terkunci:* ${booking.snapshotKodeUnit}`);
+  }
+
+  if (booking.kurirPengantar) {
+    lines.push(`*Kurir Pengantar:* ${booking.kurirPengantar}`);
   }
 
   if (booking.kategoriTarif === 'jam') {
@@ -67,7 +83,7 @@ export function generateBookingConfirmationWhatsAppUrl(
 }
 
 /**
- * Tautan WhatsApp Kirim ke Penyewa: Pemberitahuan Unit Siap & Disetujui
+ * 2. Tautan WhatsApp Kirim ke Penyewa: Pemberitahuan Unit Siap & Disetujui
  */
 export function generateApprovalNoticeToCustomerWhatsAppUrl(booking: BookingRecord): string {
   const customerPhone = normalizeWhatsAppNumber(booking.nomorWa);
@@ -85,8 +101,7 @@ export function generateApprovalNoticeToCustomerWhatsAppUrl(booking: BookingReco
     `*Lokasi Serah Terima:* ${booking.alamatPengantaran || poolLabel}`,
     `*Total Sewa:* ${formatRupiah(booking.totalHargaEstimasi)}`,
     '',
-    'Harap siapkan fisik ID Pendamping saat serah terima (KTM/SIM C/Paspor/NPWP).',
-    'Tim kami akan segera menghubungi saat pengantaran unit. Sampai jumpa di Malang & Batu! 😊',
+    'Tim kami akan menghubungi saat pengantaran unit. Sampai jumpa di Malang & Batu! 😊',
   ];
 
   const message = lines.join('\n');
@@ -94,7 +109,7 @@ export function generateApprovalNoticeToCustomerWhatsAppUrl(booking: BookingReco
 }
 
 /**
- * Tautan WhatsApp Kirim ke Penyewa: Berita Acara Serah Terima Unit (Mulai Sewa)
+ * 3. Tautan WhatsApp Kirim ke Penyewa: Berita Acara Serah Terima Unit (Mulai Sewa)
  */
 export function generateHandoverNoticeToCustomerWhatsAppUrl(booking: BookingRecord): string {
   const customerPhone = normalizeWhatsAppNumber(booking.nomorWa);
@@ -110,8 +125,7 @@ export function generateHandoverNoticeToCustomerWhatsAppUrl(booking: BookingReco
     `*Lokasi Penjemputan:* ${booking.alamatPenjemputan || 'Pool Ryokourent'}`,
     '*Kelengkapan Diterima:* 2 Helm SNI + Jas Hujan + STNK Asli',
     '',
-    '⚠️ _Tips Berkendara: Selalu gunakan helm, patuhi rambu lalu lintas, dan hubungi kami jika membutuhkan bantuan darurat di jalan._',
-    'Selamat menikmati perjalanan wisata di Malang & Batu!',
+    '⚠️ _Tips: Hubungi kami jika membutuhkan bantuan darurat di jalan. Selamat menikmati perjalanan!_',
   ];
 
   const message = lines.join('\n');
@@ -119,7 +133,7 @@ export function generateHandoverNoticeToCustomerWhatsAppUrl(booking: BookingReco
 }
 
 /**
- * Tautan WhatsApp Kirim ke Penyewa: Kwitansi Selesai Sewa & Denda (D-27)
+ * 4. Tautan WhatsApp Kirim ke Penyewa: Kwitansi Selesai Sewa & Denda (D-27)
  */
 export function generateReturnReceiptWhatsAppUrl(
   booking: BookingRecord,
@@ -158,7 +172,7 @@ export function generateReturnReceiptWhatsAppUrl(
 }
 
 /**
- * Tautan WhatsApp Pemberitahuan Tukar Unit (D-19)
+ * 5. Tautan WhatsApp Pemberitahuan Tukar Unit (D-19)
  */
 export function generateUnitExchangeNoticeWhatsAppUrl(
   booking: BookingRecord,
@@ -168,7 +182,7 @@ export function generateUnitExchangeNoticeWhatsAppUrl(
 
   const lines = [
     `*PEMBERITAHUAN TUKAR UNIT MOTOR — RYOKOURENT* 🔄`,
-    `Halo Kak *${booking.nama}*, proses pertukaran armada telah dicatat dalam sistem kami:`,
+    `Halo Kak *${booking.nama}*, proses pertukaran armada telah dicatat:`,
     '',
     `*No. Booking:* ${booking.noBooking}`,
     `*Unit Semula:* ${exchange.unitLamaKode}`,
@@ -177,10 +191,113 @@ export function generateUnitExchangeNoticeWhatsAppUrl(
     `*Alasan:* ${exchange.alasan}`,
     `*Operator Penanggung Jawab:* ${exchange.operator}`,
     '',
-    'Semua kelengkapan (STNK, helm, jas hujan) telah disesuaikan dengan unit baru. Mohon diperiksa kembali kelengkapannya.',
+    'Semua perlengkapan (STNK, helm, jas hujan) telah disesuaikan dengan unit baru.',
     'Terima kasih atas pengertian dan kerjasamanya!',
   ];
 
   const message = lines.join('\n');
   return `https://api.whatsapp.com/send?phone=${encodeURIComponent(customerPhone)}&text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * 6. Tautan WhatsApp: Surat Tugas / Penugasan Kurir Pengantar & Penjemput (Bagian 10 Baru)
+ */
+export function generateCourierTaskWhatsAppUrl(
+  booking: BookingRecord,
+  courierPhone: string,
+  courierName: string
+): string {
+  const targetPhone = normalizeWhatsAppNumber(courierPhone);
+
+  const lines = [
+    `*SURAT TUGAS PENGANTARAN / PENJEMPUTAN MOTOR* 🛵📦`,
+    `Kepada Rekan Kurir: *${courierName}*`,
+    '',
+    `*No. Booking:* ${booking.noBooking}`,
+    `*Penyewa:* ${booking.nama}`,
+    `*No. HP Penyewa:* ${booking.nomorWa || '-'}`,
+    `*Unit Motor:* ${booking.snapshotNamaMotor} (Kode: *${booking.snapshotKodeUnit || 'Siapkan di Pool'}*)`,
+    `*Jadwal:* ${booking.jamTanggalMulai.replace('T', ' ')} WIB`,
+    `*Lokasi Pengantaran:* ${booking.alamatPengantaran}`,
+    `*Lokasi Penjemputan:* ${booking.alamatPenjemputan}`,
+    `*Durasi Sewa:* ${booking.labelDurasi}`,
+    '',
+    'Harap cek kelengkapan unit (2 Helm SNI + Jas Hujan + STNK Asli) sebelum diserahterimakan.',
+    'Semangat dan utamakan keselamatan berkendara! 🛵💨',
+  ];
+
+  const message = lines.join('\n');
+  return `https://api.whatsapp.com/send?phone=${encodeURIComponent(targetPhone)}&text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * 7. Tautan WhatsApp: Tagihan Sewa Bulanan (1 Bulan) (Bagian 10 Baru)
+ */
+export function generateMonthlyInvoiceWhatsAppUrl(booking: BookingRecord): string {
+  const customerPhone = normalizeWhatsAppNumber(booking.nomorWa);
+
+  const lines = [
+    `*INVOICE SEWA BULANAN (30 HARI) — RYOKOURENT* 📄🏍️`,
+    `Yth. Kak *${booking.nama}*, rincian tagihan sewa bulanan Anda:`,
+    '',
+    `*No. Booking:* ${booking.noBooking}`,
+    `*Model Motor:* ${booking.snapshotNamaMotor} (Kode: *${booking.snapshotKodeUnit}*)`,
+    `*Paket Durasi:* 1 Bulan (30 Hari Penuh)`,
+    `*Periode Sewa:* ${booking.jamTanggalMulai.replace('T', ' ')} s/d ${booking.jamTanggalSelesai.replace('T', ' ')} WIB`,
+    `*Total Tarif Bulanan:* ${formatRupiah(booking.totalHargaEstimasi)}`,
+    '',
+    '✨ *Benefit Sewa Bulanan:* Termasuk gratis ganti oli mesin 1x per bulan di bengkel rekanan resmi kami.',
+    'Pembayaran dapat dilakukan melalui transfer atau kasir pool kami. Terima kasih!',
+  ];
+
+  const message = lines.join('\n');
+  return `https://api.whatsapp.com/send?phone=${encodeURIComponent(customerPhone)}&text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * 8. Tautan WhatsApp: Pengingat Jatuh Tempo Pengembalian (H-2 Jam) (Bagian 10 Baru)
+ */
+export function generateDueReminderWhatsAppUrl(booking: BookingRecord): string {
+  const customerPhone = normalizeWhatsAppNumber(booking.nomorWa);
+
+  const lines = [
+    `*PENGINGAT WAKTU PENGEMBALIAN MOTOR — RYOKOURENT* ⏰`,
+    `Halo Kak *${booking.nama}*, mengingatkan masa sewa motor Anda akan segera berakhir:`,
+    '',
+    `*No. Booking:* ${booking.noBooking}`,
+    `*Unit:* ${booking.snapshotKodeUnit} (${booking.snapshotNamaMotor})`,
+    `*Tenggat Waktu Kembali:* *${booking.jamTanggalSelesai.replace('T', ' ')} WIB*`,
+    `*Lokasi Pengembalian:* ${booking.alamatPenjemputan || 'Pool Ryokourent'}`,
+    '',
+    'Jika Kakak ingin memperpanjang masa sewa, mohon segera hubungi kami sebelum waktu sewa berakhir agar unit dapat diperpanjang tanpa denda keterlambatan.',
+    'Terima kasih dan hati-hati di jalan! 🙏',
+  ];
+
+  const message = lines.join('\n');
+  return `https://api.whatsapp.com/send?phone=${encodeURIComponent(customerPhone)}&text=${encodeURIComponent(message)}`;
+}
+
+/**
+ * 9. Tautan WhatsApp: Notifikasi Unit Selesai Servis (Bagian 10 Baru)
+ */
+export function generateServiceDoneWhatsAppUrl(service: ServiceRecord, adminPhone: string): string {
+  const targetPhone = normalizeWhatsAppNumber(adminPhone);
+
+  const lines = [
+    `*NOTIFIKASI UNIT SELESAI SERVIS — RYOKOURENT* 🔧✅`,
+    `Laporan pemeliharaan armada:`,
+    '',
+    `*Kode Unit:* ${service.kodeUnit}`,
+    `*Kategori Servis:* ${service.kategoriServis.toUpperCase().replace('_', ' ')}`,
+    `*Tanggal Servis:* ${service.tanggal}`,
+    `*Kilometer (KM):* ${service.kmMotor.toLocaleString('id-ID')} KM`,
+    `*Biaya:* ${formatRupiah(service.biaya)}`,
+    `*Bengkel / Mekanik:* ${service.bengkelMekanik}`,
+    `*Keterangan:* ${service.keterangan}`,
+    '',
+    'Unit telah siap kembali beroperasi dan diparkir di Pool.',
+  ];
+
+  const message = lines.join('\n');
+  return `https://api.whatsapp.com/send?phone=${encodeURIComponent(targetPhone)}&text=${encodeURIComponent(message)}`;
 }

@@ -7,6 +7,8 @@ import {
   PhysicalUnit,
   RentalSettings,
   PoolLocation,
+  ServiceRecord,
+  AppUser,
 } from './types/ryoko';
 import {
   loadDatabase,
@@ -20,8 +22,15 @@ import { AndroidBottomNav, ActiveNavTab } from './components/AndroidBottomNav';
 import { DashboardView } from './components/DashboardView';
 import { BookingsView } from './components/BookingsView';
 import { TrackingView } from './components/TrackingView';
+import { ServiceLogsView } from './components/ServiceLogsView';
 import { FleetView } from './components/FleetView';
 import { SettingsView } from './components/SettingsView';
+import { UserManagementView } from './components/UserManagementView';
+import { CourierDashboardView } from './components/CourierDashboardView';
+import { RecoveryTab } from './components/RecoveryTab';
+import { parseSessionStateMarkdown } from './utils/markdownParser';
+import { ParsedSessionState } from './types/zlce';
+import sessionStateActual from '../SESSION_STATE.md?raw';
 import { NewBookingModal } from './components/NewBookingModal';
 import {
   ApproveUnitModal,
@@ -48,11 +57,51 @@ export const App: React.FC = () => {
   // Modal States
   const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
   const [isInstallGuideOpen, setIsInstallGuideOpen] = useState(false);
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
   const [selectedApproveBooking, setSelectedApproveBooking] = useState<BookingRecord | null>(null);
   const [selectedHandoverBooking, setSelectedHandoverBooking] = useState<BookingRecord | null>(null);
   const [selectedExchangeBooking, setSelectedExchangeBooking] = useState<BookingRecord | null>(null);
   const [selectedFinishBooking, setSelectedFinishBooking] = useState<BookingRecord | null>(null);
   const [selectedUpdateTracking, setSelectedUpdateTracking] = useState<UnitTracking | null>(null);
+
+  // Parsed ZLCE Session State for Recovery Wizard
+  const recoverySessionState: ParsedSessionState = useMemo(() => {
+    try {
+      return parseSessionStateMarkdown(sessionStateActual);
+    } catch {
+      return {
+        context: {
+          projectName: 'RyokoRent Android APK',
+          stack: 'React 19 / TypeScript / Vite 8 / Tailwind CSS v4',
+          mode: 'LITE' as const,
+          fileWriteCapability: 'YA',
+          execCapability: 'YA',
+        },
+        status: {
+          timestampAudit: new Date().toISOString(),
+          gitBranch: 'main',
+          lastDoneTask: 'TASK-001',
+          activeTask: 'TASK-002',
+          activeTaskStatus: 'IN_PROGRESS' as const,
+          nextTask: 'TASK-003',
+        },
+        tasks: [],
+        wal: {
+          task: 'TASK-002',
+          currentStep: 'Implementasi Panel Servis & Kurir',
+          plannedFiles: 'src/components/ServiceLogsView.tsx',
+          completedSoFar: 'Skema disiapkan',
+          nextStepExact: 'Verifikasi ZLCE Recovery',
+          verificationCommand: 'python3 scripts/zlce/zlce-check.py .',
+          updatedTimestamp: '2026-10-24 15:00:00 WIB',
+        },
+        assumptions: [],
+        revisions: [],
+        handoverNotes: 'Sesi dilanjutkan dengan ZLCE v3.2.2',
+        auditLog: [],
+      };
+    }
+  }, []);
 
   // Sync state helper
   const updateDatabaseState = useCallback((newDb: RyokoDatabase, actionName?: string, detail?: string) => {
@@ -485,10 +534,77 @@ export const App: React.FC = () => {
       units: updatedUnits,
     };
 
+    const positionLabel =
+      updated.statusPosisi === 'kurir'
+        ? `Kurir (${updated.namaKurir || 'Kurir Ryoko'})`
+        : updated.statusPosisi === 'servis'
+        ? `Servis (${updated.namaBengkel || 'Bengkel'})`
+        : updated.statusPosisi === 'disewa'
+        ? `Disewa (${updated.namaPenyewa || 'Penyewa'})`
+        : `Parkir (${updated.poolParkir === 'batu' ? 'Pool Batu' : 'Pool Malang'})`;
+
     updateDatabaseState(
       newDb,
       'Update Posisi Lacak Unit',
-      `Posisi unit ${updated.kodeUnit} diubah menjadi ${updated.statusPosisi} (${updated.poolParkir === 'batu' ? 'Pool Batu' : 'Pool Malang'})`
+      `Posisi unit ${updated.kodeUnit} diubah menjadi ${positionLabel}`
+    );
+  };
+
+  // 7.5 Catat Servis Rutin (7 Kategori BR-08)
+  const handleAddServiceRecord = (record: Omit<ServiceRecord, 'id' | 'createdAt'>) => {
+    const newRecord: ServiceRecord = {
+      ...record,
+      id: `SRV-${String((db.serviceRecords?.length || 0) + 1).padStart(3, '0')}`,
+      createdAt: new Date().toISOString(),
+    };
+    const updatedServiceRecords = [newRecord, ...(db.serviceRecords || [])];
+
+    const nowStr =
+      new Date().toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }) +
+      ' ' +
+      new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) +
+      ' WIB';
+
+    // Perbarui catatan di tabel pelacakan armada fisik
+    const updatedTracking = db.tracking.map(t => {
+      if (t.unitId === record.unitId) {
+        return {
+          ...t,
+          statusPosisi: 'servis' as const,
+          namaBengkel: record.bengkelMekanik,
+          catatan: `Servis [${record.kategoriServis}]: ${record.keterangan}`,
+          updatedAt: nowStr,
+          updatedBy: db.settings.operatorName || 'Operator Ryoko',
+        };
+      }
+      return t;
+    });
+
+    const updatedUnits = db.units.map(u => {
+      if (u.id === record.unitId) {
+        return {
+          ...u,
+          statusServis: 'servis' as const,
+        };
+      }
+      return u;
+    });
+
+    const newDb: RyokoDatabase = {
+      ...db,
+      serviceRecords: updatedServiceRecords,
+      tracking: updatedTracking,
+      units: updatedUnits,
+    };
+
+    updateDatabaseState(
+      newDb,
+      'Catat Servis Rutin (7 Kategori)',
+      `Servis ${record.kodeUnit} [${record.kategoriServis}] di ${record.bengkelMekanik} - Biaya: Rp ${record.biaya.toLocaleString('id-ID')}`
     );
   };
 
@@ -546,7 +662,7 @@ export const App: React.FC = () => {
         ...m,
         harga1Hari: roundToThousand(m.harga1Hari),
         harga1Minggu: roundToThousand(m.harga1Minggu),
-        harga2Minggu: roundToThousand(m.harga2Minggu),
+        harga1Bulan: roundToThousand(m.harga1Bulan),
         harga12Jam: roundToThousand(m.harga12Jam),
         harga9Jam: roundToThousand(m.harga9Jam),
         harga6Jam: roundToThousand(m.harga6Jam),
@@ -585,6 +701,122 @@ export const App: React.FC = () => {
     setDb(importedDb);
   };
 
+  // Active User Resolution
+  const activeUser: AppUser = useMemo(() => {
+    return (
+      db.users?.find(u => u.id === db.currentUserId) ||
+      db.users?.[0] || {
+        id: 'usr-admin',
+        nama: 'Budi Santoso',
+        username: 'admin.budi',
+        role: 'administrator',
+        avatarIcon: '👑',
+        isActive: true,
+        createdAt: '2026-10-24 07:00 WIB',
+      }
+    );
+  }, [db.users, db.currentUserId]);
+
+  // Switch Active User (Testing and operational profile switching)
+  const handleSwitchUser = useCallback(
+    (userId: string) => {
+      const target = db.users?.find(u => u.id === userId);
+      if (!target) return;
+      const newDb: RyokoDatabase = {
+        ...db,
+        currentUserId: userId,
+      };
+      if (target.role === 'kurir') {
+        setActiveTab('courier');
+      } else if (activeTab === 'courier') {
+        setActiveTab('dashboard');
+      }
+      updateDatabaseState(newDb, 'Ganti Akun Pengguna', `Beralih profil ke ${target.nama} (${target.role})`);
+    },
+    [db, activeTab, updateDatabaseState]
+  );
+
+  // Save / Update User
+  const handleSaveUser = useCallback(
+    (user: AppUser) => {
+      const exists = db.users?.some(u => u.id === user.id);
+      const updatedUsers = exists
+        ? db.users.map(u => (u.id === user.id ? user : u))
+        : [...(db.users || []), user];
+
+      const newDb: RyokoDatabase = {
+        ...db,
+        users: updatedUsers,
+      };
+      updateDatabaseState(
+        newDb,
+        exists ? 'Update Pengguna' : 'Tambah Pengguna Baru',
+        `Menyimpan pengguna ${user.nama} (${user.role})`
+      );
+    },
+    [db, updateDatabaseState]
+  );
+
+  // Delete User
+  const handleDeleteUser = useCallback(
+    (userId: string) => {
+      if (userId === 'usr-admin') {
+        alert('Super Administrator utama tidak dapat dihapus.');
+        return;
+      }
+      const target = db.users?.find(u => u.id === userId);
+      const updatedUsers = db.users?.filter(u => u.id !== userId) || [];
+      let newCurrent = db.currentUserId;
+      if (db.currentUserId === userId) {
+        newCurrent = 'usr-admin';
+      }
+      const newDb: RyokoDatabase = {
+        ...db,
+        users: updatedUsers,
+        currentUserId: newCurrent,
+      };
+      updateDatabaseState(newDb, 'Hapus Pengguna', `Menghapus akun ${target?.nama || userId}`);
+    },
+    [db, updateDatabaseState]
+  );
+
+  // Courier park unit back to garage
+  const handleCourierParkBack = useCallback(
+    (unitId: number, pool: PoolLocation) => {
+      const nowStr =
+        new Date().toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        }) +
+        ' ' +
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) +
+        ' WIB';
+
+      const updatedTracking = db.tracking.map(t => {
+        if (t.unitId === unitId) {
+          return {
+            ...t,
+            statusPosisi: 'parkir' as const,
+            poolParkir: pool,
+            namaKurir: undefined,
+            catatan: `Unit diparkirkan kembali oleh kurir ${activeUser.nama} ke Pool ${pool}`,
+            updatedAt: nowStr,
+            updatedBy: activeUser.nama,
+          };
+        }
+        return t;
+      });
+      const newDb: RyokoDatabase = {
+        ...db,
+        tracking: updatedTracking,
+      };
+      updateDatabaseState(newDb, 'Kembalikan Motor Kurir', `Unit #${unitId} diparkirkan kembali ke Pool ${pool}`);
+      alert(`Unit motor berhasil diparkirkan kembali ke Pool ${pool === 'batu' ? 'Batu' : 'Malang'}!`);
+    },
+    [db, activeUser.nama, updateDatabaseState]
+  );
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-text antialiased">
       {/* Container wrapper: Switch between Simulated Mobile APK Viewport vs Full Screen */}
@@ -603,16 +835,32 @@ export const App: React.FC = () => {
           pendingBookingsCount={pendingCount}
           activeDisewaCount={activeRentalsCount}
           isMobileDeviceView={isMobileDeviceView}
+          activeUser={activeUser}
+          allUsers={db.users || []}
+          onSwitchUser={handleSwitchUser}
+          onOpenUserManagement={() => setActiveTab('users')}
           onToggleDeviceView={() => setIsMobileDeviceView(prev => !prev)}
           onOpenNewBooking={() => setIsNewBookingModalOpen(true)}
           onOpenInstallGuide={() => setIsInstallGuideOpen(true)}
+          onOpenRecoveryWizard={() => setIsRecoveryModalOpen(true)}
         />
 
         {/* Main Content Area */}
         <main className="flex-1 p-3 sm:p-5 overflow-y-auto">
+          {activeTab === 'courier' && (
+            <CourierDashboardView
+              db={db}
+              activeUser={activeUser}
+              onConfirmHandover={handleConfirmHandover}
+              onConfirmFinish={handleConfirmFinish}
+              onParkUnitBack={handleCourierParkBack}
+            />
+          )}
+
           {activeTab === 'dashboard' && (
             <DashboardView
               db={db}
+              activeUser={activeUser}
               onNavigateTab={tab => setActiveTab(tab)}
               onOpenNewBooking={() => setIsNewBookingModalOpen(true)}
               onSelectBooking={b => {
@@ -648,9 +896,17 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeTab === 'service' && (
+            <ServiceLogsView
+              db={db}
+              onAddServiceRecord={handleAddServiceRecord}
+            />
+          )}
+
           {activeTab === 'fleet' && (
             <FleetView
               db={db}
+              activeUser={activeUser}
               onUpdateMotor={m => {
                 const updated = db.motors.map(item => (item.id === m.id ? m : item));
                 updateDatabaseState({ ...db, motors: updated }, 'Update Model Motor', `Perbarui tarif ${m.namaModel}`);
@@ -660,13 +916,25 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeTab === 'users' && (
+            <UserManagementView
+              db={db}
+              activeUser={activeUser}
+              onSwitchUser={handleSwitchUser}
+              onSaveUser={handleSaveUser}
+              onDeleteUser={handleDeleteUser}
+            />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView
               db={db}
+              activeUser={activeUser}
               onUpdateSettings={handleUpdateSettings}
               onResetDatabase={handleResetDatabase}
               onImportSuccess={handleImportSuccess}
               onOpenInstallGuide={() => setIsInstallGuideOpen(true)}
+              onNavigateToUsers={() => setActiveTab('users')}
             />
           )}
         </main>
@@ -678,6 +946,7 @@ export const App: React.FC = () => {
           pendingCount={pendingCount}
           activeRentalsCount={activeRentalsCount}
           repairCount={repairCount}
+          activeUser={activeUser}
         />
       </div>
 
@@ -743,6 +1012,42 @@ export const App: React.FC = () => {
       {/* 7. PWA / APK Install Modal */}
       {isInstallGuideOpen && (
         <PWAInstallModal onClose={() => setIsInstallGuideOpen(false)} />
+      )}
+
+      {/* 8. ZLCE Recovery Wizard Modal (Recovery Tab Studio) */}
+      {isRecoveryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/80">
+              <div className="flex items-center gap-2.5">
+                <span className="p-1.5 rounded-xl bg-cyan-950 border border-cyan-800 text-cyan-400 font-bold text-sm">
+                  ⚡
+                </span>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>ZLCE Studio v3.2.2 - Wizard Recovery</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-300 font-mono">
+                      Single Source of Truth
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Generator snapshot pemulihan dan verifikasi integritas konteks sesi AI agent (D-26 & ZLCE Standard)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsRecoveryModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-sm font-bold transition"
+                title="Tutup Wizard"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-950/50">
+              <RecoveryTab stateData={recoverySessionState} rawMarkdown={sessionStateActual} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

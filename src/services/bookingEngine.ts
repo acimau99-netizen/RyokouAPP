@@ -6,20 +6,18 @@ import {
   PhysicalUnit,
 } from '../types/ryoko';
 
-export const TURNAROUND_BUFFER_SECONDS = 90 * 60; // 90 menit = 5400 detik (D-17)
+export const TURNAROUND_BUFFER_SECONDS = 60 * 60; // 60 menit = 3600 detik (BR-04 revisi)
 
 /**
- * Filter sanitasi anti-16 digit NIK pada seluruh field teks (UU PDP No. 27/2022 D-21)
+ * Pembersih teks standar (BR-06: sistem offline dan tidak memerlukan sensor NIK ketat)
  */
 export function sanitizeTextNoNik(text: string): string {
   if (!text) return '';
-  // Pola 16 digit angka berurutan (dengan atau tanpa spasi/strip)
-  const nikRegex = /(?:\d[\s\-]?){16}/g;
-  return text.replace(nikRegex, '[SENSOR-ANTI-NIK-UU-PDP]');
+  return text.trim();
 }
 
 /**
- * Deteksi apakah teks mengandung 16 digit angka berurutan (indikasi NIK)
+ * Deteksi NIK (opsional / non-blocking)
  */
 export function containsNikPattern(text: string): boolean {
   if (!text) return false;
@@ -27,7 +25,7 @@ export function containsNikPattern(text: string): boolean {
 }
 
 /**
- * Format date string to WIB Epoch seconds
+ * Format string tanggal ke Epoch detik WIB
  */
 export function parseWibToEpoch(dateTimeStr: string): number {
   if (!dateTimeStr) return 0;
@@ -36,7 +34,7 @@ export function parseWibToEpoch(dateTimeStr: string): number {
 }
 
 /**
- * Format epoch seconds to WIB display string
+ * Format epoch detik ke tampilan tanggal WIB
  */
 export function formatEpochToWib(epoch: number): string {
   if (!epoch) return '-';
@@ -60,12 +58,11 @@ export function isOutsideOperationalHours(dateTimeStr: string): boolean {
   if (!dateTimeStr) return false;
   const d = new Date(dateTimeStr);
   const hours = d.getHours();
-  // Outside 07:00 - 23:00
   return hours < 7 || hours >= 23;
 }
 
 /**
- * Generator Nomor Booking Atomik RYK-YYYYMMDD-XXX (D-03, QA-01)
+ * Generator Nomor Booking Atomik RYK-YYYYMMDD-XXX
  */
 export function generateBookingNumber(db: RyokoDatabase): string {
   const now = new Date();
@@ -91,10 +88,10 @@ export function formatRupiah(amount: number): string {
 }
 
 /**
- * Kalkulator Denda Keterlambatan Cerdas (D-27)
+ * Kalkulator Denda Keterlambatan Cerdas (D-27 & BR-04/05 Revisi)
+ * - Toleransi sewa harian/bulanan: 60 menit (BR-04).
  * - ShortRent (3j, 6j, 9j): Step-Up ke paket jam di atasnya jika keterlambatan >= 60 menit.
  * - ShortRent 12 Jam: Keterlambatan >= 60 menit dikenakan denda harian per jam.
- * - Sewa Harian: Toleransi 90 menit; keterlambatan > 90 menit dikenakan denda harian per jam.
  */
 export function calculateOvertimePenalty(
   booking: BookingRecord,
@@ -192,14 +189,14 @@ export function calculateOvertimePenalty(
     };
   }
 
-  // KASUS B: Kategori Harian / Mingguan / Paket (Toleransi 90 Menit)
-  if (lateMinutes <= 90) {
+  // KASUS B: Kategori Harian / Mingguan / Bulanan / Paket (Toleransi 60 Menit - BR-04 revisi)
+  if (lateMinutes <= 60) {
     return {
       terlambat: false,
       menitTelat: lateMinutes,
       nominalDenda: 0,
-      dendaFormat: 'Rp 0 (Toleransi <= 90 mnt)',
-      keterangan: `Terlambat ${lateMinutes} menit (masih dalam toleransi 90 menit sewa harian).`,
+      dendaFormat: 'Rp 0 (Toleransi <= 60 mnt)',
+      keterangan: `Terlambat ${lateMinutes} menit (masih dalam batas toleransi 60 menit sewa harian/bulanan).`,
     };
   }
 
@@ -211,14 +208,12 @@ export function calculateOvertimePenalty(
     menitTelat: lateMinutes,
     nominalDenda: nominal,
     dendaFormat: formatRupiah(nominal),
-    keterangan: `Sewa Harian telat ${lateMinutes} mnt (${lateHours} jam) x ${formatRupiah(dendaHarian)}/jam.`,
+    keterangan: `Sewa Harian/Bulanan telat ${lateMinutes} mnt (${lateHours} jam) x ${formatRupiah(dendaHarian)}/jam.`,
   };
 }
 
 /**
- * Cek Ketersediaan 1 Unit Fisik Tertentu pada Rentang Waktu (D-17, D-26)
- * - Turnaround buffer 90 menit (5400 detik) di kedua sisi rentang jadwal
- * - Unit sedang dibawa (`ryokou_disewa`) yang lewat jadwal ditahan ketersediaannya sampai selesai
+ * Cek Ketersediaan 1 Unit Fisik Tertentu pada Rentang Waktu (Buffer 60 Menit)
  */
 export function isUnitAvailableForRange(
   unitId: number,
@@ -234,7 +229,10 @@ export function isUnitAvailableForRange(
 
   // Cek tracking status
   const track = db.tracking.find(t => t.unitId === unitId);
-  if (track && track.statusPosisi === 'servis') return false;
+  if (track && (track.statusPosisi === 'servis' || track.statusPosisi === 'kurir')) {
+    // Unit sedang servis atau dipakai kurir
+    return false;
+  }
 
   const nowEpoch = Math.floor(Date.now() / 1000);
 
@@ -242,7 +240,7 @@ export function isUnitAvailableForRange(
   const activeBookings = db.bookings.filter(
     b =>
       b.unitId === unitId &&
-      (b.status === 'ryokou_approved' || b.status === 'ryokou_disewa') &&
+      (b.status === 'ryokou_approved' || b.status === 'ryokou_disewa' || b.status === 'ryokou_diservis') &&
       (!excludeBookingId || b.id !== excludeBookingId)
   );
 
@@ -254,7 +252,6 @@ export function isUnitAvailableForRange(
     const bufferedStart = bStart - TURNAROUND_BUFFER_SECONDS;
     const bufferedEnd = effectiveEnd + TURNAROUND_BUFFER_SECONDS;
 
-    // Ada tumpang tindih waktu
     if (reqStartEpoch < bufferedEnd && reqEndEpoch > bufferedStart) {
       return false;
     }
@@ -264,7 +261,7 @@ export function isUnitAvailableForRange(
 }
 
 /**
- * Ambil Daftar Seluruh Unit Fisik yang Tersedia Bebas Bentrok untuk Model Motor Tertentu (D-26)
+ * Ambil Daftar Seluruh Unit Fisik yang Tersedia Bebas Bentrok untuk Model Motor Tertentu (Buffer 60 Mnt)
  */
 export function getAvailableUnitsForModel(
   motorId: number,
@@ -293,7 +290,7 @@ export function getAvailableUnitsForModel(
 }
 
 /**
- * Indikator Stok Biner Tegas Publik (D-05: Tersedia / Habis)
+ * Indikator Stok Biner Tegas Publik (D-05)
  */
 export function getPublicStockIndicator(
   motorId: number,

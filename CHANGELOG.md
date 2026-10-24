@@ -1,39 +1,22 @@
-# Catatan Perubahan (Changelog)
+# Changelog
 
-Semua perubahan penting pada proyek **ZLCE (Zero-Loss Context Engineering)** didokumentasikan di sini. Format mengikuti prinsip [Keep a Changelog](https://keepachangelog.com/id/1.0.0/).
+Semua perubahan penting pada proyek ini dicatat dalam berkas ini.
+Format berbasis [Keep a Changelog](https://keepachangelog.com/id/1.1.0/),
+dan proyek ini menganut [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
----
-
-## [3.2.2] - 2026-10-21
-
-### Ditambahkan
-- Standar skrip kanonik di `scripts/zlce/` (`zlce-check.py`, `zlce-snapshot.sh`, `zlce-collect.py`) dengan wrapper tipis di `scripts/`.
-- Dukungan flag `--state <file>` dan `--no-git` pada `zlce-check.py` untuk menguji contoh berkas tanpa repositori git aktif.
-- Dokumentasi modular `docs/USAGE.md`, `SECURITY.md`, dan `CONTRIBUTING.md`.
-- Sinkronisasi template impor `?raw` di web app langsung dari direktori `templates/`.
-
-### Diperbaiki
-- Paritas validasi `zlceValidator.ts` ditingkatkan untuk mencocokkan logika `zlce-check.py` pada seluruh aturan dokumen `SESSION_STATE.md` (deteksi dependensi, ID duplikat, keselarasan WAL vs IN_PROGRESS, status task aktif).
-- Perbaikan parser Markdown agar tidak membuang baris teks yang mengandung kata "ID" dalam daftar asumsi.
-- Perbaikan penanganan fallback clipboard di 22 titik menggunakan helper terpadu `copyText()`.
-- Optimasi penyimpanan histori `useSessionPersistence` dengan skema *lightweight snapshot* (tanpa duplikasi objek terurai `stateData`).
-- Sinkronisasi metadata HTML (`lang="id"`, sinkronisasi title dan deskripsi).
-
----
-
-## [3.2.1] - 2026-10-18
-
-### Diperbaiki
-- Sinkronisasi penamaan profil domain dan pemetaan `DOMAIN_BOOKING.profile.md`.
-- Normalisasi penanganan format timestamp UTC ISO 8601 dan fallback aturan jam `X1` ("jam: ?").
-
----
-
-## [3.2.0] - 2026-10-14
+## [3.2.2] - 2026-10-24
 
 ### Ditambahkan
-- Inisiasi awal ZLCE Studio web app (React 19 + Vite + Tailwind CSS v4).
-- 4 Quality Gates terstruktur: Blueprint, Rules, Tasks/Testing, Session State/Workflow.
-- Protokol pemulihan darurat Kasus A–D (Working tree bersih, In-flight diff, Commit desync, Wildcard diff).
-- Matriks triase revisi R1–R7 (Level S, M dependen, M independen).
-- Modul uji benchmark Test Harness (14 butir evaluasi).
+- Inisialisasi arsitektur RyokoRent Android APK berbasis LocalStorage.
+- Model data `MotorModel`, `PhysicalUnit`, `UnitTracking`, `BookingRecord`, dan `ServiceRecord`.
+- Panel Catatan Servis Rutin 7 kategori (Oli Mesin, Oli Gardan, Kampas Rem, Ganti Ban, CVT Part, Aki/Baterai, Servis Kecelakaan).
+- Dukungan tarif sewa 1 Bulan menggantikan paket 2 Minggu.
+- Status `diservis` pada alur state machine dan posisi armada `kurir` disertai nama kurir penanggung jawab.
+- Jeda ketersediaan turnaround buffer disesuaikan menjadi 60 menit.
+- Filter rekapitulasi omset & laporan finansial berdasarkan rentang tanggal kustom.
+- Integrasi tab Recovery ZLCE Studio untuk pembuatan snapshot pemulihan langsung dari antarmuka aplikasi.
+- Fitur WhatsApp lanjutan (tagihan sewa bulanan, surat tugas kurir, pengingat jatuh tempo H-2 jam).
+
+### Diubah
+- Sinkronisasi `BLUEPRINT.md` dengan penyesuaian aturan bisnis BR-01, BR-02, BR-04, BR-06, dan penempatan WhatsApp pada Bagian 10.
+- Penyederhanaan alur pemesanan tanpa meminta/memblokir NIK KTP.

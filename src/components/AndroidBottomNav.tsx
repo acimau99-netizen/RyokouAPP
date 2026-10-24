@@ -3,11 +3,24 @@ import {
   LayoutDashboard,
   CalendarCheck2,
   Compass,
+  Wrench,
   Bike,
   Settings,
+  Users,
+  Navigation,
 } from 'lucide-react';
+import { AppUser } from '../types/ryoko';
+import { getUserEffectivePermissions } from '../utils/userPermissions';
 
-export type ActiveNavTab = 'dashboard' | 'bookings' | 'tracking' | 'fleet' | 'settings';
+export type ActiveNavTab =
+  | 'dashboard'
+  | 'bookings'
+  | 'tracking'
+  | 'service'
+  | 'fleet'
+  | 'settings'
+  | 'users'
+  | 'courier';
 
 interface AndroidBottomNavProps {
   activeTab: ActiveNavTab;
@@ -15,6 +28,7 @@ interface AndroidBottomNavProps {
   pendingCount: number;
   activeRentalsCount: number;
   repairCount: number;
+  activeUser?: AppUser;
 }
 
 export const AndroidBottomNav: React.FC<AndroidBottomNavProps> = ({
@@ -23,44 +37,110 @@ export const AndroidBottomNav: React.FC<AndroidBottomNavProps> = ({
   pendingCount,
   activeRentalsCount,
   repairCount,
+  activeUser,
 }) => {
-  const tabs = [
-    {
-      id: 'dashboard' as ActiveNavTab,
-      label: 'Beranda',
-      icon: LayoutDashboard,
-      badge: 0,
-    },
-    {
-      id: 'bookings' as ActiveNavTab,
-      label: 'Penyewaan',
-      icon: CalendarCheck2,
-      badge: pendingCount, // show pending approval count
-      badgeColor: 'bg-amber-500 text-slate-950',
-    },
-    {
-      id: 'tracking' as ActiveNavTab,
-      label: 'Lacak Unit',
-      icon: Compass,
-      badge: repairCount > 0 ? repairCount : 0,
-      badgeColor: 'bg-yellow-500 text-slate-950',
-    },
-    {
-      id: 'fleet' as ActiveNavTab,
-      label: 'Armada & Tarif',
-      icon: Bike,
-      badge: 0,
-    },
-    {
-      id: 'settings' as ActiveNavTab,
-      label: 'Pengaturan',
-      icon: Settings,
-      badge: 0,
-    },
-  ];
+  const permissions = getUserEffectivePermissions(activeUser);
+  const isCourier = activeUser?.role === 'kurir';
+
+  // Build tabs dynamically based on user role and permissions
+  let tabs: Array<{
+    id: ActiveNavTab;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge: number;
+    badgeColor?: string;
+  }> = [];
+
+  if (isCourier) {
+    // Mode Kurir: Khusus Tugas Antar/Jemput & Unit Motor Kurir
+    tabs = [
+      {
+        id: 'courier',
+        label: 'Tugas Kurir',
+        icon: Navigation,
+        badge: pendingCount + activeRentalsCount,
+        badgeColor: 'bg-amber-500 text-slate-950',
+      },
+      {
+        id: 'tracking',
+        label: 'Motor Kurir',
+        icon: Bike,
+        badge: 0,
+      },
+    ];
+  } else {
+    // Standard / Admin / Operator Tabs
+    tabs = [
+      {
+        id: 'dashboard',
+        label: 'Beranda',
+        icon: LayoutDashboard,
+        badge: 0,
+      },
+    ];
+
+    if (permissions.canManageBookings) {
+      tabs.push({
+        id: 'bookings',
+        label: 'Penyewaan',
+        icon: CalendarCheck2,
+        badge: pendingCount,
+        badgeColor: 'bg-amber-500 text-slate-950',
+      });
+    }
+
+    if (permissions.canManageTracking) {
+      tabs.push({
+        id: 'tracking',
+        label: 'Lacak',
+        icon: Compass,
+        badge: 0,
+      });
+    }
+
+    if (permissions.canManageService) {
+      tabs.push({
+        id: 'service',
+        label: 'Servis',
+        icon: Wrench,
+        badge: repairCount > 0 ? repairCount : 0,
+        badgeColor: 'bg-amber-500 text-slate-950',
+      });
+    }
+
+    // Armada: visible to admin, operator, and custom admin with canManageFleet
+    if (activeUser?.role === 'administrator' || activeUser?.role === 'operator' || permissions.canManageFleet) {
+      tabs.push({
+        id: 'fleet',
+        label: 'Armada',
+        icon: Bike,
+        badge: 0,
+      });
+    }
+
+    // User Management: visible to Administrator or custom admin with canManageUsers
+    if (activeUser?.role === 'administrator' || permissions.canManageUsers) {
+      tabs.push({
+        id: 'users',
+        label: 'Pengguna',
+        icon: Users,
+        badge: 0,
+      });
+    }
+
+    // Settings: visible to Administrator or custom admin with canManageSettings
+    if (activeUser?.role === 'administrator' || permissions.canManageSettings) {
+      tabs.push({
+        id: 'settings',
+        label: 'Pengaturan',
+        icon: Settings,
+        badge: 0,
+      });
+    }
+  }
 
   return (
-    <nav className="bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/90 px-1 py-1 sm:py-1.5 flex items-center justify-around select-none z-20 shrink-0">
+    <nav className="bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/90 px-1 py-1 sm:py-1.5 flex items-center justify-around select-none z-20 shrink-0 overflow-x-auto">
       {tabs.map(tab => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
@@ -68,7 +148,7 @@ export const AndroidBottomNav: React.FC<AndroidBottomNavProps> = ({
           <button
             key={tab.id}
             onClick={() => onSelectTab(tab.id)}
-            className={`flex-1 py-1.5 px-1 flex flex-col items-center justify-center relative transition-all duration-150 rounded-xl ${
+            className={`flex-1 min-w-[56px] py-1.5 px-1 flex flex-col items-center justify-center relative transition-all duration-150 rounded-xl ${
               isActive
                 ? 'text-cyan-400 font-semibold'
                 : 'text-slate-400 hover:text-slate-200'

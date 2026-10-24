@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   RyokoDatabase,
   RentalSettings,
+  AppUser,
 } from '../types/ryoko';
 import {
   getStorageUsage,
@@ -26,22 +27,28 @@ import {
   CheckCircle,
   AlertTriangle,
   History,
+  Users,
+  UserCheck,
 } from 'lucide-react';
 
 interface SettingsViewProps {
   db: RyokoDatabase;
+  activeUser?: AppUser;
   onUpdateSettings: (settings: RentalSettings) => void;
   onResetDatabase: () => void;
   onImportSuccess: (db: RyokoDatabase) => void;
   onOpenInstallGuide: () => void;
+  onNavigateToUsers?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   db,
+  activeUser,
   onUpdateSettings,
   onResetDatabase,
   onImportSuccess,
   onOpenInstallGuide,
+  onNavigateToUsers,
 }) => {
   const [adminWa, setAdminWa] = useState(db.settings.adminWhatsapp || '6281234567890');
   const [operatorName, setOperatorName] = useState(db.settings.operatorName || 'Operator Ryoko');
@@ -128,6 +135,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <span>{saveMsg}</span>
         </div>
       )}
+
+      {/* Kartu Manajemen Pengguna & Hak Akses 4 Tingkat */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-800/40 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-xl shrink-0">
+            👥
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>Panel Manajemen Pengguna & Hak Akses</span>
+              </h3>
+              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-bold">
+                {db.users?.length || 0} Akun
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Kelola 4 tingkatan peran: Administrator, Admin Custom, Operator, dan Kurir.
+            </p>
+          </div>
+        </div>
+
+        {onNavigateToUsers && (
+          <button
+            type="button"
+            onClick={onNavigateToUsers}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-md shadow-indigo-950/40 shrink-0"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Kelola Pengguna →</span>
+          </button>
+        )}
+      </div>
 
       {/* 1. Pengaturan Operasional & WhatsApp */}
       <form

@@ -65,6 +65,7 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
 
   // Position count metrics
   const countParkir = db.tracking.filter(t => t.statusPosisi === 'parkir').length;
+  const countKurir = db.tracking.filter(t => t.statusPosisi === 'kurir').length;
   const countDisewa = db.tracking.filter(t => t.statusPosisi === 'disewa').length;
   const countServis = db.tracking.filter(t => t.statusPosisi === 'servis').length;
 
@@ -81,7 +82,7 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
             </span>
           </h2>
           <p className="text-xs text-slate-400">
-            Sistem 1-Baris-1-Unit (D-26 & Opsi 3A): Pantau posisi Parkir Pool, Servis Bengkel, atau Sedang Disewa.
+            Sistem 1-Baris-1-Unit (D-26 & ASM-03): Pantau posisi Parkir Pool, Dipakai Kurir, Sedang Disewa, atau Servis.
           </p>
         </div>
 
@@ -118,6 +119,16 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
             }`}
           >
             🅿️ Parkir di Pool ({countParkir})
+          </button>
+          <button
+            onClick={() => setFilterPosisi('kurir')}
+            className={`px-3 py-1.5 rounded-xl font-medium shrink-0 transition ${
+              filterPosisi === 'kurir'
+                ? 'bg-purple-600 text-white font-bold shadow-sm'
+                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            🚚 Dipakai Kurir ({countKurir})
           </button>
           <button
             onClick={() => setFilterPosisi('disewa')}
@@ -180,6 +191,7 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
             const motor = db.motors.find(m => m.id === track.motorId);
 
             const isParkir = track.statusPosisi === 'parkir';
+            const isKurir = track.statusPosisi === 'kurir';
             const isDisewa = track.statusPosisi === 'disewa';
             const isServis = track.statusPosisi === 'servis';
 
@@ -189,6 +201,8 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                 className={`bg-slate-900/90 rounded-2xl p-4 border transition flex flex-col justify-between shadow-sm space-y-3 ${
                   isServis
                     ? 'border-amber-700/60 hover:border-amber-500'
+                    : isKurir
+                    ? 'border-purple-700/60 hover:border-purple-500'
                     : isDisewa
                     ? 'border-blue-700/60 hover:border-blue-500'
                     : 'border-slate-800 hover:border-emerald-600/60'
@@ -218,16 +232,18 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                       className={`text-[11px] font-bold px-2.5 py-1 rounded-lg shrink-0 ${
                         isServis
                           ? 'bg-amber-950/80 border border-amber-700/70 text-amber-300'
+                          : isKurir
+                          ? 'bg-purple-950/80 border border-purple-700/70 text-purple-300'
                           : isDisewa
                           ? 'bg-blue-950/80 border border-blue-700/70 text-blue-300'
                           : 'bg-emerald-950/80 border border-emerald-700/70 text-emerald-300'
                       }`}
                     >
-                      {isServis ? '🔧 Servis' : isDisewa ? '🛵 Disewa' : '🅿️ Parkir'}
+                      {isServis ? '🔧 Servis' : isKurir ? '🚚 Kurir' : isDisewa ? '🛵 Disewa' : '🅿️ Parkir'}
                     </span>
                   </div>
 
-                  {/* Body: Location / Service / Borrower Detail */}
+                  {/* Body: Location / Kurir / Service / Borrower Detail */}
                   <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2 text-xs">
                     {isParkir && (
                       <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/70 space-y-1">
@@ -244,6 +260,36 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                         </p>
                         {track.catatan && (
                           <p className="text-[11px] text-slate-300 italic">
+                            &quot;{track.catatan}&quot;
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {isKurir && (
+                      <div className="bg-purple-950/30 p-2.5 rounded-xl border border-purple-800/40 space-y-1.5 text-slate-300">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] text-purple-300 uppercase tracking-wider font-semibold block">
+                              Unit Dipegang Kurir
+                            </span>
+                            <span className="font-bold text-white text-xs">
+                              {track.namaKurir || 'Kurir Operasional Ryoko'}
+                            </span>
+                          </div>
+                          {track.noBooking && (
+                            <span className="text-[10px] text-purple-300 font-mono font-semibold bg-purple-900/60 px-1.5 py-0.5 rounded">
+                              #{track.noBooking}
+                            </span>
+                          )}
+                        </div>
+                        {track.namaPenyewa && (
+                          <p className="text-[11px] text-slate-300">
+                            Tujuan Antar/Jemput: <strong className="text-white">{track.namaPenyewa}</strong>
+                          </p>
+                        )}
+                        {track.catatan && (
+                          <p className="text-[11px] text-purple-200/80 italic">
                             &quot;{track.catatan}&quot;
                           </p>
                         )}

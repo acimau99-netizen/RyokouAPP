@@ -4,12 +4,14 @@ import {
   BookingRecord,
   UnitTracking,
   MotorModel,
+  AppUser,
 } from '../types/ryoko';
 import {
   formatRupiah,
   getPublicStockIndicator,
   calculateOvertimePenalty,
 } from '../services/bookingEngine';
+import { getUserEffectivePermissions } from '../utils/userPermissions';
 import {
   Bike,
   Compass,
@@ -24,11 +26,13 @@ import {
   RefreshCw,
   Wrench,
   MessageCircle,
+  Lock,
 } from 'lucide-react';
 
 interface DashboardViewProps {
   db: RyokoDatabase;
-  onNavigateTab: (tab: 'dashboard' | 'bookings' | 'tracking' | 'fleet' | 'settings') => void;
+  activeUser?: AppUser;
+  onNavigateTab: (tab: 'dashboard' | 'bookings' | 'tracking' | 'service' | 'fleet' | 'settings') => void;
   onOpenNewBooking: () => void;
   onSelectBooking: (booking: BookingRecord) => void;
   onSelectTracking: (track: UnitTracking) => void;
@@ -37,16 +41,31 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   db,
+  activeUser,
   onNavigateTab,
   onOpenNewBooking,
   onSelectBooking,
   onSelectTracking,
   onSyncArmada,
 }) => {
+  const permissions = getUserEffectivePermissions(activeUser);
+  const canViewRevenue = permissions.canViewRevenue;
+  // Date filter state for revenue report (Q-01)
+  const [revenuePeriod, setRevenuePeriod] = React.useState<'hari_ini' | '7_hari' | 'bulan_ini' | 'kustom'>('bulan_ini');
+  const [customStartDate, setCustomStartDate] = React.useState<string>(() => {
+    const d = new Date();
+    d.setDate(1); // awal bulan ini
+    return d.toISOString().split('T')[0];
+  });
+  const [customEndDate, setCustomEndDate] = React.useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+
   // Compute Key Operational Metrics
   const totalArmada = db.units.length;
   const unitParkirMalang = db.tracking.filter(t => t.statusPosisi === 'parkir' && t.poolParkir === 'malang').length;
   const unitParkirBatu = db.tracking.filter(t => t.statusPosisi === 'parkir' && t.poolParkir === 'batu').length;
+  const unitDipakaiKurir = db.tracking.filter(t => t.statusPosisi === 'kurir').length;
   const unitSedangDisewa = db.tracking.filter(t => t.statusPosisi === 'disewa').length;
   const unitServis = db.tracking.filter(t => t.statusPosisi === 'servis').length;
 
@@ -54,13 +73,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const approvedBookings = db.bookings.filter(b => b.status === 'ryokou_approved');
   const activeDisewaBookings = db.bookings.filter(b => b.status === 'ryokou_disewa');
 
-  // Revenue estimate from today's active bookings
-  const omsetHariIni = db.bookings
-    .filter(b => b.status === 'ryokou_disewa' || b.status === 'ryokou_selesai')
-    .reduce((sum, b) => sum + (b.totalHargaEstimasi || 0), 0);
+  // Filter bookings for Revenue Report (Q-01)
+  const currentEpoch = Math.floor(Date.now() / 1000);
+  const startOfDayEpoch = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+  const sevenDaysAgoEpoch = startOfDayEpoch - 7 * 86400;
+  const startOfMonthEpoch = Math.floor(new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000);
+
+  const filteredRevenueBookings = React.useMemo(() => {
+    return db.bookings.filter(b => {
+      // Hanya transaksi yang telah berjalan / selesai
+      if (b.status !== 'ryokou_disewa' && b.status !== 'ryokou_selesai') return false;
+
+      const bookingEpoch = b.startEpoch || startOfDayEpoch;
+
+      if (revenuePeriod === 'hari_ini') {
+        return bookingEpoch >= startOfDayEpoch;
+      }
+      if (revenuePeriod === '7_hari') {
+        return bookingEpoch >= sevenDaysAgoEpoch;
+      }
+      if (revenuePeriod === 'bulan_ini') {
+        return bookingEpoch >= startOfMonthEpoch;
+      }
+      if (revenuePeriod === 'kustom') {
+        const start = customStartDate ? Math.floor(new Date(customStartDate + 'T00:00:00').getTime() / 1000) : 0;
+        const end = customEndDate ? Math.floor(new Date(customEndDate + 'T23:59:59').getTime() / 1000) : Infinity;
+        return bookingEpoch >= start && bookingEpoch <= end;
+      }
+      return true;
+    });
+  }, [db.bookings, revenuePeriod, customStartDate, customEndDate, startOfDayEpoch, sevenDaysAgoEpoch, startOfMonthEpoch]);
+
+  const totalOmsetTersaring = filteredRevenueBookings.reduce(
+    (sum, b) => sum + (b.totalHargaEstimasi || 0) + (b.dendaNominal || 0),
+    0
+  );
+  const totalDendaTersaring = filteredRevenueBookings.reduce((sum, b) => sum + (b.dendaNominal || 0), 0);
 
   // Check for any currently rented units that are overdue
-  const currentEpoch = Math.floor(Date.now() / 1000);
   const overdueBookings = activeDisewaBookings.filter(b => {
     const end = b.endEpoch;
     return end && currentEpoch > end;
@@ -142,88 +192,236 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-      {/* Operational KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4">
+      {/* Operational KPI Grid (6 Status) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
         {/* Total Armada */}
         <div
           onClick={() => onNavigateTab('fleet')}
-          className="bg-slate-900/90 border border-slate-800 hover:border-cyan-600/60 rounded-2xl p-3.5 sm:p-4 cursor-pointer transition shadow-sm group"
+          className="bg-slate-900/90 border border-slate-800 hover:border-cyan-600/60 rounded-2xl p-3 cursor-pointer transition shadow-sm group"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold">Total Armada</span>
-            <Bike className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+          <div className="flex items-center justify-between text-slate-400 mb-1.5">
+            <span className="text-[11px] font-semibold">Total Armada</span>
+            <Bike className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-white">{totalArmada}</span>
-            <span className="text-xs text-slate-400 font-medium">Unit Fisik</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl sm:text-2xl font-black text-white">{totalArmada}</span>
+            <span className="text-[10px] text-slate-400 font-medium">Unit</span>
           </div>
-          <p className="text-[11px] text-cyan-400 mt-1 truncate">6 Model Terdaftar</p>
+          <p className="text-[10px] text-cyan-400 mt-0.5 truncate">Garasi Fisik</p>
         </div>
 
         {/* Parkir Pool Malang */}
         <div
           onClick={() => onNavigateTab('tracking')}
-          className="bg-slate-900/90 border border-slate-800 hover:border-emerald-600/60 rounded-2xl p-3.5 sm:p-4 cursor-pointer transition shadow-sm group"
+          className="bg-slate-900/90 border border-slate-800 hover:border-emerald-600/60 rounded-2xl p-3 cursor-pointer transition shadow-sm group"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold">Pool Malang</span>
-            <MapPin className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+          <div className="flex items-center justify-between text-slate-400 mb-1.5">
+            <span className="text-[11px] font-semibold">Pool Malang</span>
+            <MapPin className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-emerald-400">{unitParkirMalang}</span>
-            <span className="text-xs text-slate-400 font-medium">Ready</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl sm:text-2xl font-black text-emerald-400">{unitParkirMalang}</span>
+            <span className="text-[10px] text-slate-400 font-medium">Ready</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1 truncate">Dinoyo, Lowokwaru</p>
+          <p className="text-[10px] text-slate-400 mt-0.5 truncate">Dinoyo Lowokwaru</p>
         </div>
 
         {/* Parkir Pool Batu */}
         <div
           onClick={() => onNavigateTab('tracking')}
-          className="bg-slate-900/90 border border-slate-800 hover:border-emerald-600/60 rounded-2xl p-3.5 sm:p-4 cursor-pointer transition shadow-sm group"
+          className="bg-slate-900/90 border border-slate-800 hover:border-emerald-600/60 rounded-2xl p-3 cursor-pointer transition shadow-sm group"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold">Pool Batu</span>
-            <MapPin className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+          <div className="flex items-center justify-between text-slate-400 mb-1.5">
+            <span className="text-[11px] font-semibold">Pool Batu</span>
+            <MapPin className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-emerald-400">{unitParkirBatu}</span>
-            <span className="text-xs text-slate-400 font-medium">Ready</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl sm:text-2xl font-black text-emerald-400">{unitParkirBatu}</span>
+            <span className="text-[10px] text-slate-400 font-medium">Ready</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1 truncate">Diponegoro, Sisir</p>
+          <p className="text-[10px] text-slate-400 mt-0.5 truncate">Diponegoro Sisir</p>
+        </div>
+
+        {/* Dipakai Kurir (ASM-03) */}
+        <div
+          onClick={() => onNavigateTab('tracking')}
+          className="bg-slate-900/90 border border-slate-800 hover:border-purple-600/60 rounded-2xl p-3 cursor-pointer transition shadow-sm group"
+        >
+          <div className="flex items-center justify-between text-slate-400 mb-1.5">
+            <span className="text-[11px] font-semibold">Dipakai Kurir</span>
+            <span className="text-xs group-hover:scale-110 transition-transform">🚚</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl sm:text-2xl font-black text-purple-400">{unitDipakaiKurir}</span>
+            <span className="text-[10px] text-purple-300 font-medium">Diantar</span>
+          </div>
+          <p className="text-[10px] text-purple-300 mt-0.5 truncate">Antar/Jemput Tamu</p>
         </div>
 
         {/* Sedang Disewa */}
         <div
           onClick={() => onNavigateTab('bookings')}
-          className="bg-slate-900/90 border border-slate-800 hover:border-blue-600/60 rounded-2xl p-3.5 sm:p-4 cursor-pointer transition shadow-sm group"
+          className="bg-slate-900/90 border border-slate-800 hover:border-blue-600/60 rounded-2xl p-3 cursor-pointer transition shadow-sm group"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold">Sedang Disewa</span>
-            <Clock className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform" />
+          <div className="flex items-center justify-between text-slate-400 mb-1.5">
+            <span className="text-[11px] font-semibold">Sedang Disewa</span>
+            <Clock className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-blue-400">{unitSedangDisewa}</span>
-            <span className="text-xs text-slate-400 font-medium">Di Jalan</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl sm:text-2xl font-black text-blue-400">{unitSedangDisewa}</span>
+            <span className="text-[10px] text-slate-400 font-medium">Di Jalan</span>
           </div>
-          <p className="text-[11px] text-blue-300 mt-1 truncate">{activeDisewaBookings.length} Transaksi Aktif</p>
+          <p className="text-[10px] text-blue-300 mt-0.5 truncate">{activeDisewaBookings.length} Kontrak</p>
         </div>
 
         {/* Servis Bengkel */}
         <div
-          onClick={() => onNavigateTab('tracking')}
-          className="bg-slate-900/90 border border-slate-800 hover:border-amber-600/60 rounded-2xl p-3.5 sm:p-4 cursor-pointer transition shadow-sm group col-span-2 lg:col-span-1"
+          onClick={() => onNavigateTab('service')}
+          className="bg-slate-900/90 border border-slate-800 hover:border-amber-600/60 rounded-2xl p-3 cursor-pointer transition shadow-sm group"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold">Servis Bengkel</span>
-            <Wrench className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+          <div className="flex items-center justify-between text-slate-400 mb-1.5">
+            <span className="text-[11px] font-semibold">Servis Bengkel</span>
+            <Wrench className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-amber-400">{unitServis}</span>
-            <span className="text-xs text-slate-400 font-medium">Perawatan</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl sm:text-2xl font-black text-amber-400">{unitServis}</span>
+            <span className="text-[10px] text-amber-300 font-medium">Perawatan</span>
           </div>
-          <p className="text-[11px] text-amber-300 mt-1 truncate">Rekanan Resmi</p>
+          <p className="text-[10px] text-amber-300 mt-0.5 truncate">Panel Servis (7 Kat)</p>
         </div>
       </div>
+
+      {/* Laporan Omset & Rekapitulasi Finansial (Q-01 Filter Kustom Rentang Tanggal) */}
+      {canViewRevenue ? (
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-800/80">
+            <div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm sm:text-base font-bold text-white">
+                  Rekapitulasi Omset & Finansial Rental (Q-01)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400">
+                Filter penerimaan sewa dan denda keterlambatan per periode harian, mingguan, atau rentang tanggal kustom bulanan.
+              </p>
+            </div>
+
+            {/* Period selector buttons */}
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs shrink-0 overflow-x-auto">
+              <button
+                onClick={() => setRevenuePeriod('hari_ini')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition ${
+                  revenuePeriod === 'hari_ini'
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Hari Ini
+              </button>
+              <button
+                onClick={() => setRevenuePeriod('7_hari')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition ${
+                  revenuePeriod === '7_hari'
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                7 Hari
+              </button>
+              <button
+                onClick={() => setRevenuePeriod('bulan_ini')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition ${
+                  revenuePeriod === 'bulan_ini'
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Bulan Ini
+              </button>
+              <button
+                onClick={() => setRevenuePeriod('kustom')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition ${
+                  revenuePeriod === 'kustom'
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Kustom Rentang
+              </button>
+            </div>
+          </div>
+
+          {/* Custom Date Range Picker (shown when kustom) */}
+          {revenuePeriod === 'kustom' && (
+            <div className="bg-slate-950/80 p-3 rounded-xl border border-cyan-800/50 flex flex-wrap items-center gap-3 text-xs">
+              <span className="text-cyan-400 font-semibold">Rentang Tanggal Kustom:</span>
+              <div className="flex items-center gap-2">
+                <label className="text-slate-400">Dari:</label>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={e => setCustomStartDate(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-cyan-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-slate-400">Sampai:</label>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={e => setCustomEndDate(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-cyan-500"
+                />
+              </div>
+              <span className="text-[11px] text-slate-400">
+                Menampilkan {filteredRevenueBookings.length} transaksi di rentang ini.
+              </span>
+            </div>
+          )}
+
+          {/* Revenue KPI Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+              <span className="text-[11px] text-slate-400 block">Total Omset Rental</span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
+                {formatRupiah(totalOmsetTersaring)}
+              </span>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                Dari {filteredRevenueBookings.length} transaksi sewa
+              </span>
+            </div>
+
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+              <span className="text-[11px] text-slate-400 block">Penerimaan Denda Overtime (D-27)</span>
+              <span className="text-xl sm:text-2xl font-black text-amber-400 font-mono">
+                {formatRupiah(totalDendaTersaring)}
+              </span>
+              <span className="text-[10px] text-slate-500 block mt-0.5">Kompensasi keterlambatan unit</span>
+            </div>
+
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+              <span className="text-[11px] text-slate-400 block">Biaya Servis Garasi (7 Kategori)</span>
+              <span className="text-xl sm:text-2xl font-black text-cyan-400 font-mono">
+                {formatRupiah(db.serviceRecords?.reduce((sum, r) => sum + (r.biaya || 0), 0) || 0)}
+              </span>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {db.serviceRecords?.length || 0} catatan perawatan armada
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 text-center space-y-2">
+          <div className="w-8 h-8 rounded-full bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+            <Lock className="w-4 h-4 text-slate-400" />
+          </div>
+          <h4 className="text-xs font-bold text-slate-300">Laporan Omset & Finansial Dibatasi</h4>
+          <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+            Akun peran <strong>{activeUser?.role || 'Operator'}</strong> dibatasi dari melihat rekapitulasi omset dan nominal finansial rental.
+          </p>
+        </div>
+      )}
 
       {/* Two Column Section: Stock Status & Pending Action Strip */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -233,7 +431,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                 <span>Indikator Ketersediaan Model Motor</span>
-                <span className="text-[11px] font-mono text-cyan-400 font-normal">(Buffer 90 Menit D-17)</span>
+                <span className="text-[11px] font-mono text-cyan-400 font-normal">(Buffer 60 Menit BR-04)</span>
               </h3>
               <p className="text-xs text-slate-400">
                 Ketersediaan dihitung global per model motor; pool hanya tempat parkir fisik (D-26).

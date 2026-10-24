@@ -97,9 +97,14 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
       stepNumber: '03',
       badgeClass: 'bg-blue-950/80 border-blue-700/70 text-blue-300',
     },
-    ryokou_selesai: {
-      label: '4. Selesai',
+    ryokou_diservis: {
+      label: 'Diservis (Bengkel)',
       stepNumber: '04',
+      badgeClass: 'bg-amber-950/80 border-amber-600/70 text-amber-300',
+    },
+    ryokou_selesai: {
+      label: '5. Selesai',
+      stepNumber: '05',
       badgeClass: 'bg-slate-800/90 border-slate-700 text-slate-300',
     },
   };

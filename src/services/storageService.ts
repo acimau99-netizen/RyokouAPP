@@ -12,10 +12,27 @@ export function loadDatabase(): RyokoDatabase {
     }
     const parsed = JSON.parse(raw) as RyokoDatabase;
     if (!parsed.motors || !parsed.units || !parsed.bookings) {
-      // Corrupt or old format, reseed
       saveDatabase(INITIAL_DATABASE);
       return INITIAL_DATABASE;
     }
+    // Auto-migrate serviceRecords if missing
+    if (!parsed.serviceRecords) {
+      parsed.serviceRecords = INITIAL_DATABASE.serviceRecords || [];
+    }
+    // Auto-migrate users if missing
+    if (!parsed.users || !Array.isArray(parsed.users) || parsed.users.length === 0) {
+      parsed.users = INITIAL_DATABASE.users || [];
+    }
+    if (!parsed.currentUserId) {
+      parsed.currentUserId = INITIAL_DATABASE.currentUserId || 'usr-admin';
+    }
+    // Ensure monthly price exists
+    parsed.motors = parsed.motors.map(m => {
+      if ((m as unknown as { harga2Minggu?: number }).harga2Minggu && !m.harga1Bulan) {
+        m.harga1Bulan = Math.round((m.harga1Hari * 22) / 1000) * 1000;
+      }
+      return m;
+    });
     return parsed;
   } catch (error) {
     console.error('Failed to load database from LocalStorage:', error);

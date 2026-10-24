@@ -703,6 +703,7 @@ export const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
 }) => {
   const [posisi, setPosisi] = useState<UnitPositionStatus>(unitTracking.statusPosisi);
   const [pool, setPool] = useState<PoolLocation>(unitTracking.poolParkir);
+  const [kurir, setKurir] = useState<string>(unitTracking.namaKurir || '');
   const [bengkel, setBengkel] = useState<string>(unitTracking.namaBengkel || '');
   const [kontak, setKontak] = useState<string>(unitTracking.kontakBengkel || '');
   const [estimasi, setEstimasi] = useState<string>(unitTracking.estimasiSelesai || '');
@@ -723,6 +724,7 @@ export const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
       ...unitTracking,
       statusPosisi: posisi,
       poolParkir: pool,
+      namaKurir: posisi === 'kurir' ? kurir : undefined,
       namaBengkel: posisi === 'servis' ? bengkel : undefined,
       kontakBengkel: posisi === 'servis' ? kontak : undefined,
       estimasiSelesai: posisi === 'servis' ? estimasi : undefined,
@@ -751,28 +753,39 @@ export const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
         <div className="p-5 space-y-4 text-xs text-slate-300">
           <div>
             <label className="block font-semibold mb-1 text-slate-200">Status Posisi Unit:</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
                 onClick={() => setPosisi('parkir')}
-                className={`p-2.5 rounded-xl border text-center font-medium transition ${
+                className={`p-2 rounded-xl border text-center font-medium transition ${
                   posisi === 'parkir'
-                    ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
+                    ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 font-bold'
                     : 'bg-slate-950 border-slate-800 text-slate-400'
                 }`}
               >
-                🅿️ Parkir di Pool
+                🅿️ Pool
+              </button>
+              <button
+                type="button"
+                onClick={() => setPosisi('kurir')}
+                className={`p-2 rounded-xl border text-center font-medium transition ${
+                  posisi === 'kurir'
+                    ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300 font-bold'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                🛵 Kurir
               </button>
               <button
                 type="button"
                 onClick={() => setPosisi('servis')}
-                className={`p-2.5 rounded-xl border text-center font-medium transition ${
+                className={`p-2 rounded-xl border text-center font-medium transition ${
                   posisi === 'servis'
-                    ? 'bg-amber-950/60 border-amber-500 text-amber-300'
+                    ? 'bg-amber-950/60 border-amber-500 text-amber-300 font-bold'
                     : 'bg-slate-950 border-slate-800 text-slate-400'
                 }`}
               >
-                🔧 Servis Bengkel
+                🔧 Servis
               </button>
             </div>
             {posisi === 'disewa' && (
@@ -793,6 +806,23 @@ export const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                 <option value="malang">Pool Malang (Dinoyo)</option>
                 <option value="batu">Pool Batu (Diponegoro)</option>
               </select>
+            </div>
+          )}
+
+          {posisi === 'kurir' && (
+            <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+              <label className="block font-semibold text-slate-200">Nama Kurir yang Membawa Unit (ASM-03):</label>
+              <input
+                type="text"
+                value={kurir}
+                onChange={e => setKurir(e.target.value)}
+                placeholder="Contoh: Budi Santoso (Kurir Operasional Malang)"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-cyan-300 font-semibold"
+                required
+              />
+              <span className="text-[10px] text-slate-400 block">
+                Catat identitas kurir yang bertanggung jawab atas unit selama mobilitas pengantaran/penjemputan.
+              </span>
             </div>
           )}
 

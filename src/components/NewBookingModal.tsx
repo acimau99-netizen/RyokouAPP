@@ -11,21 +11,22 @@ import {
 import {
   generateBookingNumber,
   formatRupiah,
-  sanitizeTextNoNik,
-  containsNikPattern,
   isOutsideOperationalHours,
   parseWibToEpoch,
   getAvailableUnitsForModel,
 } from '../services/bookingEngine';
-import { generateBookingConfirmationWhatsAppUrl } from '../services/whatsappService';
+import {
+  generateBookingConfirmationWhatsAppUrl,
+  generateCourierTaskWhatsAppUrl,
+} from '../services/whatsappService';
 import {
   X,
   PlusCircle,
   AlertTriangle,
   Clock,
   MapPin,
-  ShieldAlert,
   MessageCircle,
+  Truck,
   Calendar,
 } from 'lucide-react';
 
@@ -50,7 +51,6 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
   const defaultDates = useMemo(() => {
     const start = new Date();
     start.setHours(9, 0, 0, 0);
-    // start YYYY-MM-DDTHH:mm
     const startStr = start.toISOString().slice(0, 16);
 
     const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
@@ -68,22 +68,18 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
   const [pool, setPool] = useState<PoolLocation>('malang');
   const [alamatPengantaran, setAlamatPengantaran] = useState<string>('');
   const [alamatPenjemputan, setAlamatPenjemputan] = useState<string>('');
+  const [kurirPengantar, setKurirPengantar] = useState<string>('');
   const [catatanKhusus, setCatatanKhusus] = useState<string>('');
   const [lockUnitImmediately, setLockUnitImmediately] = useState<boolean>(true);
   const [selectedUnitId, setSelectedUnitId] = useState<number>(0);
   const [autoOpenWa, setAutoOpenWa] = useState<boolean>(true);
-
-  // Check NIK violation
-  const hasNikWarning = useMemo(() => {
-    return containsNikPattern(nama) || containsNikPattern(catatanKhusus);
-  }, [nama, catatanKhusus]);
 
   // Check Out-of-hours warning (D-06)
   const isOutOfHours = useMemo(() => {
     return isOutsideOperationalHours(jamTanggalMulai) || isOutsideOperationalHours(jamTanggalSelesai);
   }, [jamTanggalMulai, jamTanggalSelesai]);
 
-  // Compute duration label & price
+  // Compute duration label & price (BR-01 Revisi: 1 Bulan menggantikan 2 Minggu)
   const { totalHarga, labelDurasi } = useMemo(() => {
     if (!selectedMotor) return { totalHarga: 85000, labelDurasi: '1 Hari (24 Jam)' };
 
@@ -91,8 +87,8 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       if (pilihanDurasi === '1_minggu') {
         return { totalHarga: selectedMotor.harga1Minggu, labelDurasi: '1 Minggu (7 Hari)' };
       }
-      if (pilihanDurasi === '2_minggu') {
-        return { totalHarga: selectedMotor.harga2Minggu, labelDurasi: '2 Minggu (14 Hari)' };
+      if (pilihanDurasi === '1_bulan') {
+        return { totalHarga: selectedMotor.harga1Bulan || 1750000, labelDurasi: '1 Bulan (30 Hari)' };
       }
       return { totalHarga: selectedMotor.harga1Hari, labelDurasi: '1 Hari (24 Jam)' };
     }
@@ -110,11 +106,9 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       return { totalHarga: selectedMotor.harga12Jam, labelDurasi: 'ShortRent 12 Jam' };
     }
 
-    // Paket promo default
     return { totalHarga: 260000, labelDurasi: 'Paket Promo Wisata' };
   }, [selectedMotor, kategoriTarif, pilihanDurasi]);
 
-  // Available units for the selected model and time range
   const startEpoch = parseWibToEpoch(jamTanggalMulai);
   const endEpoch = parseWibToEpoch(jamTanggalSelesai);
 
@@ -136,7 +130,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
     else if (dur === '12_jam') hoursToAdd = 12;
     else if (dur === '1_hari') hoursToAdd = 24;
     else if (dur === '1_minggu') hoursToAdd = 24 * 7;
-    else if (dur === '2_minggu') hoursToAdd = 24 * 14;
+    else if (dur === '1_bulan') hoursToAdd = 24 * 30; // 30 hari
 
     const endDate = new Date(startDate.getTime() + hoursToAdd * 60 * 60 * 1000);
     setJamTanggalSelesai(endDate.toISOString().slice(0, 16));
@@ -149,10 +143,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       return;
     }
 
-    const cleanNama = sanitizeTextNoNik(nama);
-    const cleanCatatan = sanitizeTextNoNik(catatanKhusus);
     const newBookingNumber = generateBookingNumber(db);
-
     const nowStr =
       new Date().toLocaleDateString('id-ID', {
         day: '2-digit',
@@ -171,7 +162,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       id: Date.now(),
       noBooking: newBookingNumber,
       status: chosenUnit ? 'ryokou_approved' : 'ryokou_booking',
-      nama: cleanNama,
+      nama: nama.trim(),
       nomorWa: nomorWa.trim(),
       jenisIdPendukung,
       tandaPelanggan,
@@ -189,9 +180,10 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
       pool,
       alamatPengantaran: alamatPengantaran.trim() || (pool === 'batu' ? 'Pool Batu (Diponegoro)' : 'Pool Malang (Dinoyo)'),
       alamatPenjemputan: alamatPenjemputan.trim() || (pool === 'batu' ? 'Pool Batu (Diponegoro)' : 'Pool Malang (Dinoyo)'),
+      kurirPengantar: kurirPengantar.trim(),
       totalHargaEstimasi: totalHarga,
       luarJamOperasional: isOutOfHours,
-      catatanKhusus: cleanCatatan,
+      catatanKhusus: catatanKhusus.trim(),
       createdAt: nowStr,
       approvedAt: chosenUnit ? nowStr : undefined,
       dendaNominal: 0,
@@ -218,8 +210,8 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
               <PlusCircle className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-white">Input Transaksi Booking Baru</h2>
-              <p className="text-[11px] text-slate-400">Generator nomor booking atomik RYK-YYYYMMDD-XXX</p>
+              <h2 className="text-sm sm:text-base font-bold text-white">Input Pemesanan Motor Baru</h2>
+              <p className="text-[11px] text-slate-400">Format order revisi ZLCE (Termasuk opsi sewa 1 Bulan & Kurir)</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
@@ -229,24 +221,13 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs text-slate-200">
-          {/* Anti-NIK UU PDP Warning */}
-          {hasNikWarning && (
-            <div className="bg-amber-950/50 border border-amber-600/70 rounded-xl p-3 text-amber-200 text-xs flex items-start gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <strong className="block font-bold">Peringatan Kepatuhan UU PDP No. 27/2022 (D-21):</strong>
-                <span>Terdeteksi 16 digit angka berurutan (indikasi NIK KTP). Sistem akan menyensor otomatis menjadi [SENSOR-ANTI-NIK-UU-PDP]. Gunakan Jenis ID Pendukung tanpa menyimpan nomor NIK.</span>
-              </div>
-            </div>
-          )}
-
           {/* Out-of-hours Warning (D-06) */}
           {isOutOfHours && (
             <div className="bg-blue-950/40 border border-blue-700/60 rounded-xl p-3 text-blue-200 text-xs flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
               <div>
                 <strong className="block font-bold">Catatan Jam Operasional (D-06):</strong>
-                <span>Waktu sewa berada di luar jam reguler (07.00 - 23.00 WIB). Konfirmasi kesepakatan pengantaran luar jam kerja akan disertakan otomatis pada format WhatsApp.</span>
+                <span>Jadwal sewa berada di luar jam kerja reguler (07.00 - 23.00 WIB). Layanan antar/jemput luar jam kerja akan diinformasikan ke WhatsApp.</span>
               </div>
             </div>
           )}
@@ -274,7 +255,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold mb-1 text-slate-300">2. Kategori Tarif (D-18):</label>
+              <label className="block font-semibold mb-1 text-slate-300">2. Kategori Tarif (D-18 & BR-01):</label>
               <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
                 <button
                   type="button"
@@ -286,7 +267,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                     kategoriTarif === 'harian' ? 'bg-cyan-600 text-white font-bold' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Harian
+                  Harian / Bulan
                 </button>
                 <button
                   type="button"
@@ -320,11 +301,11 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                   <select
                     value={pilihanDurasi}
                     onChange={e => handleDurationChange(e.target.value as DurationOption)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-white"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-white font-semibold"
                   >
                     <option value="1_hari">1 Hari (24 Jam) — {formatRupiah(selectedMotor.harga1Hari)}</option>
                     <option value="1_minggu">1 Minggu (7 Hari) — {formatRupiah(selectedMotor.harga1Minggu)}</option>
-                    <option value="2_minggu">2 Minggu (14 Hari) — {formatRupiah(selectedMotor.harga2Minggu)}</option>
+                    <option value="1_bulan">1 Bulan (30 Hari Penuh) — {formatRupiah(selectedMotor.harga1Bulan || 1750000)}</option>
                   </select>
                 )}
 
@@ -385,7 +366,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
           {/* Row 3: Nama Penyewa, WA & ID Pendukung */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block font-semibold mb-1 text-slate-300">Nama Lengkap Penyewa:</label>
+              <label className="block font-semibold mb-1 text-slate-300">Nama Penyewa:</label>
               <input
                 type="text"
                 value={nama}
@@ -409,18 +390,18 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold mb-1 text-slate-300">ID Pendukung (Tanpa NIK):</label>
+              <label className="block font-semibold mb-1 text-slate-300">ID Pendukung:</label>
               <select
                 value={jenisIdPendukung}
                 onChange={e => setJenisIdPendukung(e.target.value as SupportIdType)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
               >
                 <option value="SIM_C">SIM C (Asli)</option>
-                <option value="KTM">KTM (Kartu Mahasiswa UB/UM/UMM)</option>
+                <option value="KTM">KTM (Kartu Mahasiswa Malang)</option>
                 <option value="NPWP">NPWP</option>
                 <option value="Paspor">Paspor</option>
-                <option value="BPJS">BPJS Kesehatan / Ketenagakerjaan</option>
-                <option value="Kartu_Pegawai">Kartu Pegawai / ID Card Kerja</option>
+                <option value="BPJS">BPJS Kesehatan / Kerja</option>
+                <option value="Kartu_Pegawai">Kartu Pegawai / Kerja</option>
               </select>
             </div>
           </div>
@@ -468,8 +449,8 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
             </div>
           </div>
 
-          {/* Row 5: Lokasi Pengantaran & Penjemputan */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Row 5: Alamat Antar & Kurir Penanggung Jawab (ASM-03 Revisi) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-semibold mb-1 text-slate-300">Lokasi Pengantaran (Ambil):</label>
               <input
@@ -490,9 +471,22 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
               />
             </div>
+            <div>
+              <label className="block font-semibold mb-1 text-slate-300 flex items-center gap-1">
+                <Truck className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Nama Kurir Pengantar (Opsional):</span>
+              </label>
+              <input
+                type="text"
+                value={kurirPengantar}
+                onChange={e => setKurirPengantar(e.target.value)}
+                placeholder="Misal: Budi Santoso / Kurir Antar"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium"
+              />
+            </div>
           </div>
 
-          {/* Unit Locking Option (Operator Instant Approval) */}
+          {/* Unit Locking Option (Buffer 60 Menit) */}
           <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer font-semibold text-white">
@@ -505,7 +499,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
                 <span>Langsung Kunci Unit Fisik Sekarang (Status: Approved)</span>
               </label>
               <span className="text-[11px] text-cyan-400 font-mono">
-                {availableUnits.length} Unit Siap
+                {availableUnits.length} Unit Bebas Jadwal
               </span>
             </div>
 
@@ -513,7 +507,7 @@ export const NewBookingModal: React.FC<NewBookingModalProps> = ({
               <div>
                 {availableUnits.length === 0 ? (
                   <p className="text-amber-400 text-xs">
-                    Stok unit kosong di jam ini. Booking akan disimpan sebagai status &quot;Booking Baru&quot; untuk dicari unit alternatif nanti.
+                    Stok unit kosong di rentang waktu ini (buffer 60 menit). Booking akan disimpan sebagai status &quot;Booking Baru&quot;.
                   </p>
                 ) : (
                   <select
